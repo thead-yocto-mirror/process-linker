@@ -19,12 +19,16 @@
 #ifndef _PROCESS_LINKER_H_
 #define _PROCESS_LINKER_H_
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define PLINK_VERSION_MAJOR     0
 #define PLINK_VERSION_MINOR     1
 #define PLINK_VERSION_REVISION  1
 
 /* Maximum data descriptors in one packet */
-#define PLINK_MAX_DATA_DESCS 4
+#define PLINK_MAX_DATA_DESCS 10
 
 /* Close all the connections from client. */
 /* Can be used as the second parameter of PLINK_close when the instance is created as SERVER */
@@ -213,5 +217,9 @@ PlinkStatus PLINK_recv_ex(PlinkHandle plink, PlinkChannelID channel, PlinkPacket
  * \return other unsuccessful.
  */
 PlinkStatus PLINK_close(PlinkHandle plink, PlinkChannelID channel);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_PROCESS_LINKER_H_ */

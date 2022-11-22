@@ -349,7 +349,7 @@ static int stitchOneFrame(StitcherContext *ctx)
                 in->format == PLINK_COLOR_FormatRawBayer10bit ||
                 in->format == PLINK_COLOR_FormatRawBayer12bit)
             {
-                int shift = in->format == PLINK_COLOR_FormatYUV420SemiPlanarP010 ? 2 : 8;
+                int shift = in->format == PLINK_COLOR_FormatYUV420SemiPlanarP010 ? 2 : 4;
                 unsigned int temp[4];
                 for (int h = 0; h < height; h++)
                 {

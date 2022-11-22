@@ -21,6 +21,10 @@
 
 #include "process_linker.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* When set PlinkMsg.msg to this exit code, it means to close the connection */
 #define PLINK_EXIT_CODE -1
 
@@ -184,5 +188,9 @@ typedef struct _PlinkTimeInfo
     long long seconds;
     long long useconds;
 } PlinkTimeInfo;
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* !_PROCESS_LINKER_TYPES_H_ */

@@ -68,7 +68,8 @@ typedef struct _PlinkContext
 {
     PlinkMode mode;
     struct sockaddr_un addr;
-    struct iovec io[PLINK_MAX_DATA_DESCS];
+    struct iovec ioIn[PLINK_MAX_DATA_DESCS];
+    struct iovec ioOut[PLINK_MAX_DATA_DESCS];
     int sockfd;
     int cfd[MAX_CONNECTIONS];
     int connect[MAX_CONNECTIONS];
@@ -228,13 +229,13 @@ PLINK_send(PlinkHandle plink, PlinkChannelID channel, PlinkPacket *pkt)
     for (int i = 0; i < pkt->num; i++)
     {
         PlinkDescHdr *hdr = (PlinkDescHdr *)(pkt->list[i]);
-        ctx->io[i].iov_base = pkt->list[i];
-        ctx->io[i].iov_len = hdr->size + DATA_HEADER_SIZE;
-        PLINK_PRINT(INFO, "Sending %ld bytes\n", ctx->io[i].iov_len);
+        ctx->ioOut[i].iov_base = pkt->list[i];
+        ctx->ioOut[i].iov_len = hdr->size + DATA_HEADER_SIZE;
+        PLINK_PRINT(INFO, "Sending Out %ld bytes\n", ctx->ioOut[i].iov_len);
     }
 
     struct msghdr msg = {0};
-    msg.msg_iov = ctx->io;
+    msg.msg_iov = ctx->ioOut;
     msg.msg_iovlen = pkt->num;
 
     if (pkt->fd > PLINK_INVALID_FD)
@@ -273,11 +274,11 @@ PLINK_recv(PlinkHandle plink, PlinkChannelID channel, PlinkPacket *pkt)
 
     char buf[CMSG_SPACE(sizeof(int))];
     memset(buf, 0, sizeof(buf));
-    ctx->io[0].iov_base = ctx->buffer + ctx->offset;
-    ctx->io[0].iov_len = MAX_BUFFER_SIZE - ctx->offset;
+    ctx->ioIn[0].iov_base = ctx->buffer + ctx->offset;
+    ctx->ioIn[0].iov_len = MAX_BUFFER_SIZE - ctx->offset;
 
     struct msghdr msg = {0};
-    msg.msg_iov = ctx->io;
+    msg.msg_iov = ctx->ioIn;
     msg.msg_iovlen = 1;
     msg.msg_control = buf;
     msg.msg_controllen = sizeof(buf);
@@ -477,6 +478,8 @@ parseData(PlinkContext *ctx, PlinkPacket *pkt, int remaining)
         {
             // not enough buffer to store received data, need another recv call
             sts = PLINK_STATUS_MORE_DATA;
+            PLINK_PRINT(ERROR, "sts:%d Received %d bytes,index exceed max:%d!\n",
+			    sts, remaining, PLINK_MAX_DATA_DESCS);
             break;
         }
 
