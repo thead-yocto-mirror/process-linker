@@ -1,47 +1,120 @@
+##
+ # Copyright (C) 2020 Alibaba Group Holding Limited
+##
 ifneq ($(wildcard ../.param),)
-	include ../.param
+  include ../.param
 endif
 
-INC_PATH ?= /usr/include
-LIB_PATH ?= /usr/lib
+#CONFIG_DEBUG_MODE=1
+CONFIG_OUT_ENV=hwlinux
 
-OUTPUTDIR = ./output
-LIBNAME = $(OUTPUTDIR)/libplink.so
-server_NAME = $(OUTPUTDIR)/plinkserver
-client_NAME = $(OUTPUTDIR)/plinkclient
-stitcher_NAME = $(OUTPUTDIR)/plinkstitcher
+CONFIG_BUILD_DRV_EXTRA_PARAM:=""    	
+CONFIG_BUILD_LIB_EXTRA_PARAM:=""
+CONFIG_BUILD_TST_EXTRA_PARAM:=""	
 
-INCS = ./inc
-LIBSRCS = ./src/process_linker.c
-LIBOBJS = $(LIBSRCS:.c=.o)
-server_SRCS = ./test/plink_server.c
-server_OBJS = $(server_SRCS:.c=.o)
-client_SRCS = ./test/plink_client.c
-client_OBJS = $(client_SRCS:.c=.o)
-stitcher_SRCS = ./test/plink_stitcher.c
-stitcher_OBJS = $(stitcher_SRCS:.c=.o)
+DIR_TARGET_BASE=bsp/ivs		
+DIR_TARGET_LIB =bsp/ivs/lib
+DIR_TARGET_KO  =bsp/ivs/ko
+DIR_TARGET_TEST=bsp/ivs/test
 
-CFLAGS = -I$(INCS) -I$(INC_PATH)/vidmem
-CFLAGS += -pthread -fPIC -O
+MODULE_NAME=IVS
+BUILD_LOG_START="\033[47;30m>>> $(MODULE_NAME) $@ begin\033[0m"
+BUILD_LOG_END  ="\033[47;30m<<< $(MODULE_NAME) $@ end\033[0m"
 
-$(shell if [ ! -e $(OUTPUTDIR) ];then mkdir -p $(OUTPUTDIR); fi)
+#
+# Do a parallel build with multiple jobs, based on the number of CPUs online
+# in this system: 'make -j8' on a 8-CPU system, etc.
+#
+# (To override it, run 'make JOBS=1' and similar.)
+#
 
-all: lib server client stitcher
+ifeq ($(JOBS),)
+  JOBS := $(shell grep -c ^processor /proc/cpuinfo 2>/dev/null)
+  ifeq ($(JOBS),)
+    JOBS := 1
+  endif
+endif
 
-lib: 
-	$(CC) $(LIBSRCS) $(CFLAGS) -shared -o $(LIBNAME)
+all:    info driver lib test install_local_output install_rootfs
+.PHONY: info driver lib test install_local_output install_rootfs \
+        install_prepare install_addons clean_driver clean_lib clean_test clean_output clean
 
-server: lib
-	$(CC) $(server_SRCS) $(CFLAGS) -L$(OUTPUTDIR) -L$(LIB_PATH)/vidmem -lplink -lvmem -ldl -pthread -o $(server_NAME)
+info:
+	@echo $(BUILD_LOG_START)
+	@echo "  ====== Build Info from repo project ======"
+	@echo "    BUILDROOT_DIR="$(BUILDROOT_DIR)
+	@echo "    CROSS_COMPILE="$(CROSS_COMPILE)
+	@echo "    LINUX_DIR="$(LINUX_DIR)
+	@echo "    ARCH="$(ARCH)
+	@echo "    BOARD_NAME="$(BOARD_NAME)
+	@echo "    KERNEL_ID="$(KERNELVERSION)
+	@echo "    KERNEL_DIR="$(LINUX_DIR)
+	@echo "    INSTALL_DIR_ROOTFS="$(INSTALL_DIR_ROOTFS)
+	@echo "    INSTALL_DIR_SDK="$(INSTALL_DIR_SDK)
+	@echo "  ====== Build configuration by settings ======"
+#	@echo "    CONFIG_DEBUG_MODE="$(CONFIG_DEBUG_MODE)
+	@echo "    CONFIG_OUT_ENV="$(CONFIG_OUT_ENV)
+	@echo "    JOBS="$(JOBS)
+	@echo $(BUILD_LOG_END)
 
-client: lib
-	$(CC) $(client_SRCS) $(CFLAGS) -L$(OUTPUTDIR) -L$(LIB_PATH)/vidmem -lplink -lvmem -ldl -pthread -o $(client_NAME)
+driver:
+	@echo $(BUILD_LOG_START)
+	make -C $(LINUX_DIR) M=$(PWD)/kernel_mode ARCH=$(ARCH) modules
+	@echo $(BUILD_LOG_END)
 
-stitcher: lib
-	$(CC) $(stitcher_SRCS) $(CFLAGS) -L$(OUTPUTDIR) -L$(LIB_PATH)/vidmem -lplink -lvmem -ldl -pthread -o $(stitcher_NAME)
+clean_driver:
+	@echo $(BUILD_LOG_START)
+	make -C kernel_mode KDIR=$(LINUX_DIR) clean
+	@echo $(BUILD_LOG_END)
 
-clean:
-	rm -rf $(OUTPUTDIR)
+lib:
+	@echo $(BUILD_LOG_START)
+	make -w -C user_mode hwlinux
+	@echo $(BUILD_LOG_END)
 
-%.o : %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+clean_lib:
+	@echo $(BUILD_LOG_START)
+	make clean -C user_mode
+	@echo $(BUILD_LOG_END)
+
+test: lib driver
+	@echo $(BUILD_LOG_START)
+	make -w -C test hwlinux
+	@echo $(BUILD_LOG_END)
+
+clean_test:
+	@echo $(BUILD_LOG_START)
+	make clean -C test
+	@echo $(BUILD_LOG_END)
+
+install_prepare:
+	mkdir -p ./output/rootfs/$(DIR_TARGET_KO)
+	mkdir -p ./output/rootfs/$(DIR_TARGET_LIB)
+	mkdir -p ./output/rootfs/$(DIR_TARGET_TEST)
+
+install_addons: install_prepare
+	@echo $(BUILD_LOG_START)
+	@echo $(BUILD_LOG_END)
+
+install_local_output: driver lib test install_addons
+	@echo $(BUILD_LOG_START)
+	find ./kernel_mode -name "*.ko" | xargs -i cp -f {} ./output/rootfs/$(DIR_TARGET_KO)
+	find ./user_mode -name "*.so" | xargs -i cp -f {} ./output/rootfs/$(DIR_TARGET_LIB)
+	find ./user_mode -name "*.a" | xargs -i cp -f {} ./output/rootfs/$(DIR_TARGET_LIB)
+	cp -f ./test/ivs_test ./output/rootfs/$(DIR_TARGET_TEST)
+	@if [ `command -v tree` != "" ]; then \
+	    tree ./output/rootfs;             \
+	fi
+	@echo $(BUILD_LOG_END)
+
+install_rootfs: install_local_output
+	@echo $(BUILD_LOG_START)
+	@echo $(BUILD_LOG_END)
+
+clean_output:
+	@echo $(BUILD_LOG_START)
+	rm -rf ./output
+	@echo $(BUILD_LOG_END)
+
+clean: clean_output clean_driver clean_lib clean_test
+
